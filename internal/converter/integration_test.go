@@ -17,8 +17,14 @@ func TestParserToConverterFlow(t *testing.T) {
 		expectExpanded bool // if not skipped, check if \w was expanded
 	}{
 		{
-			name:          "regex with \\w and numeric quantifier should be skipped",
-			filterLine:    `/(https?:\/\/)\w{30,}\.me\/\w{30,}\./$script,third-party`,
+			name:           "regex with \\w and numeric quantifier should be converted (approximated)",
+			filterLine:     `/(https?:\/\/)\w{30,}\.me\/\w{30,}\./$script,third-party`,
+			expectSkipped:  false,
+			expectExpanded: true,
+		},
+		{
+			name:          "regex with exact numeric quantifier should be skipped",
+			filterLine:    `/(https?:\/\/)\w{30}\.me\/\w{30}\./$script`,
 			expectSkipped: true,
 		},
 		{
@@ -81,20 +87,29 @@ func TestPatternToRegexWithExpansion(t *testing.T) {
 	assert.True(t, ValidateRegex(result), "Expected expanded regex to be valid")
 }
 
-func TestPatternWithNumericQuantifierFails(t *testing.T) {
-	// Test that numeric quantifiers cause validation failure
+func TestPatternWithNumericQuantifierSucceedsByApproximation(t *testing.T) {
+	// Test that numeric quantifiers {n,} now succeed by being converted to +
 	input := `/(https?:\/\/)\w{30,}\.me\/\w{30,}\./`
 	result := PatternToRegex(input)
 
-	// The \w should be expanded
-	assert.Contains(t, result, `[a-zA-Z0-9_]`)
+	// The \w should be expanded and {30,} should become +
+	assert.Contains(t, result, `[a-zA-Z0-9_]+`)
+	assert.NotContains(t, result, `{30,}`)
 
-	// But validation should fail due to {30,}
-	assert.False(t, ValidateRegex(result), "Expected regex with numeric quantifier to fail validation")
+	// And validation should succeed
+	assert.True(t, ValidateRegex(result), "Expected regex with approximated numeric quantifier to pass validation")
+}
+
+func TestPatternWithFixedNumericQuantifierFails(t *testing.T) {
+	// Test that exact numeric quantifiers still fail
+	input := `/(https?:\/\/)\w{30}\.me\/\w{30}\./`
+	result := PatternToRegex(input)
+
+	assert.False(t, ValidateRegex(result), "Expected regex with fixed numeric quantifier to fail validation")
 }
 
 func TestDirectConversionWithRegex(t *testing.T) {
-	// Create a filter directly
+	// Create a filter directly with {n,} quantifier
 	f := models.Filter{
 		Type:    models.FilterTypeNetwork,
 		Pattern: `/(https?:\/\/)\w{30,}\.me\/\w{30,}\./`,
@@ -106,8 +121,7 @@ func TestDirectConversionWithRegex(t *testing.T) {
 	c := New()
 	rules := c.Convert([]models.Filter{f})
 
-	// Should be skipped due to numeric quantifier
-	assert.Empty(t, rules, "Expected rule with numeric quantifier to be skipped")
-	assert.Equal(t, 1, c.stats.Skipped)
-	assert.Equal(t, 1, c.stats.SkipReasons[SkipInvalidRegex])
+	// Should NOT be skipped anymore, but converted
+	assert.NotEmpty(t, rules, "Expected rule with open numeric quantifier to be converted")
+	assert.Equal(t, 0, c.stats.Skipped)
 }

@@ -31,6 +31,8 @@ var (
 	reNonDigitChar = regexp.MustCompile(`\\D`)
 	reSpaceChar    = regexp.MustCompile(`\\s`)
 	reNonSpaceChar = regexp.MustCompile(`\\S`)
+	// Numeric quantifiers: {n,} - can be approximated with +
+	reNumericQuantifierOpen = regexp.MustCompile(`\{[0-9]+,\}`)
 )
 
 // PatternToRegex converts an ABP/uBlock pattern to a WebKit-compatible regex
@@ -99,8 +101,8 @@ func PatternToRegex(pattern string) string {
 
 // Patterns for detecting unsupported WebKit regex features
 var (
-	// Numeric quantifiers: {2}, {2,}, {2,5} - WebKit doesn't support these
-	reNumericQuantifier = regexp.MustCompile(`\{[0-9,]+\}`)
+	// Numeric quantifiers: {n} or {n,m} - WebKit doesn't support these
+	reNumericQuantifier = regexp.MustCompile(`\{[0-9]+(,[0-9]+)?\}`)
 	// Non-ASCII characters - WebKit doesn't support these in patterns
 	reNonASCII = regexp.MustCompile(`[^\x00-\x7F]`)
 	// Word boundary assertions - WebKit doesn't support these
@@ -151,6 +153,14 @@ func ValidateRegex(pattern string) bool {
 
 	// Check for word boundary assertions \b, \B
 	if reWordBoundary.MatchString(pattern) {
+		return false
+	}
+
+	// WebKit doesn't support shorthand character classes \w, \d, \s, etc.
+	// These should have been expanded by expandCharacterClasses
+	if reWordChar.MatchString(pattern) || reNonWordChar.MatchString(pattern) ||
+		reDigitChar.MatchString(pattern) || reNonDigitChar.MatchString(pattern) ||
+		reSpaceChar.MatchString(pattern) || reNonSpaceChar.MatchString(pattern) {
 		return false
 	}
 
@@ -221,5 +231,9 @@ func expandCharacterClasses(pattern string) string {
 	pattern = reDigitChar.ReplaceAllString(pattern, `[0-9]`)
 	pattern = reNonSpaceChar.ReplaceAllString(pattern, `[^ \t\n\r\f\v]`)
 	pattern = reSpaceChar.ReplaceAllString(pattern, `[ \t\n\r\f\v]`)
+
+	// Approximate {n,} with +
+	pattern = reNumericQuantifierOpen.ReplaceAllString(pattern, `+`)
+
 	return pattern
 }

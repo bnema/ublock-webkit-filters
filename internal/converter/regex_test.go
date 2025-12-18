@@ -45,7 +45,7 @@ func TestExpandCharacterClasses(t *testing.T) {
 		{
 			name:     "expand multiple \\w with quantifier",
 			input:    `(https?:\/\/)\w{30,}\.me\/\w{30,}\.`,
-			expected: `(https?:\/\/)[a-zA-Z0-9_]{30,}\.me\/[a-zA-Z0-9_]{30,}\.`,
+			expected: `(https?:\/\/)[a-zA-Z0-9_]+\.me\/[a-zA-Z0-9_]+\.`,
 		},
 		{
 			name:     "expand mixed character classes",
@@ -124,9 +124,9 @@ func TestPatternToRegex(t *testing.T) {
 			expected: `^http://example\.com/$`,
 		},
 		{
-			name:     "regex pattern with \\w (expands but has numeric quantifier)",
+			name:     "regex pattern with \\w (expands and approximates numeric quantifier)",
 			input:    `/(https?:\/\/)\w{30,}\.me\/\w{30,}\./`,
-			expected: `(https?:\/\/)[a-zA-Z0-9_]{30,}\.me\/[a-zA-Z0-9_]{30,}\.`,
+			expected: `(https?:\/\/)[a-zA-Z0-9_]+\.me\/[a-zA-Z0-9_]+\.`,
 		},
 		{
 			name:     "regex pattern with \\w and basic quantifier",
@@ -180,13 +180,33 @@ func TestValidateRegex(t *testing.T) {
 			expected: true,
 		},
 		{
-			name:     "invalid - numeric quantifier",
-			input:    `[a-zA-Z0-9_]{30,}`,
+			name:     "invalid - numeric quantifier exact",
+			input:    `[a-zA-Z0-9_]{30}`,
+			expected: false,
+		},
+		{
+			name:     "invalid - numeric quantifier range",
+			input:    `[a-zA-Z0-9_]{30,40}`,
 			expected: false,
 		},
 		{
 			name:     "invalid - exact numeric quantifier",
 			input:    `[0-9]{4}`,
+			expected: false,
+		},
+		{
+			name:     "invalid - unexpanded shorthand \\w",
+			input:    `\w+`,
+			expected: false,
+		},
+		{
+			name:     "invalid - unexpanded shorthand \\d",
+			input:    `\d+`,
+			expected: false,
+		},
+		{
+			name:     "invalid - unexpanded shorthand \\s",
+			input:    `\s+`,
 			expected: false,
 		},
 		{

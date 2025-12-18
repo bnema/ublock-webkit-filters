@@ -96,6 +96,17 @@ func CheckWebKitCompatibility(pattern string) []WebKitRegexIssue {
 	}
 
 	// Check for numeric quantifiers {n}, {n,}, {n,m}
+	// Note: {n,} is fixable as it's converted to + in expandCharacterClasses
+	if matches := reNumericQuantifierOpen.FindAllString(pattern, -1); len(matches) > 0 {
+		for _, m := range matches {
+			issues = append(issues, WebKitRegexIssue{
+				Pattern:     pattern,
+				Issue:       "numeric quantifier: " + m,
+				Fixable:     true,
+				Replacement: "+",
+			})
+		}
+	}
 	if matches := reNumericQuantifier.FindAllString(pattern, -1); len(matches) > 0 {
 		for _, m := range matches {
 			issues = append(issues, WebKitRegexIssue{
