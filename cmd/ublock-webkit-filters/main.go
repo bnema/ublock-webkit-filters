@@ -247,7 +247,7 @@ func runConvert(cmd *cobra.Command, args []string) error {
 }
 
 func runList(cmd *cobra.Command, args []string) error {
-	fmt.Println("Configured filter lists:\n")
+	fmt.Println("Configured filter lists:")
 	for _, list := range cfg.Lists {
 		status := "enabled"
 		if !list.Enabled {
