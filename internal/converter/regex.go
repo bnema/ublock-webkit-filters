@@ -24,6 +24,13 @@ var (
 	reAsterisks = regexp.MustCompile(`\*+`)
 	// Separator placeholder
 	reSeparators = regexp.MustCompile(`\^`)
+	// Shorthand character classes (WebKit doesn't support these)
+	reWordChar     = regexp.MustCompile(`\\w`)
+	reNonWordChar  = regexp.MustCompile(`\\W`)
+	reDigitChar    = regexp.MustCompile(`\\d`)
+	reNonDigitChar = regexp.MustCompile(`\\D`)
+	reSpaceChar    = regexp.MustCompile(`\\s`)
+	reNonSpaceChar = regexp.MustCompile(`\\S`)
 )
 
 // PatternToRegex converts an ABP/uBlock pattern to a WebKit-compatible regex
@@ -52,8 +59,9 @@ func PatternToRegex(pattern string) string {
 
 	// Handle regex patterns (enclosed in /.../)
 	if strings.HasPrefix(s, "/") && strings.HasSuffix(s, "/") && len(s) > 2 {
-		// It's already a regex, just remove the slashes
-		return s[1 : len(s)-1]
+		// It's already a regex, remove the slashes and expand character classes
+		regex := s[1 : len(s)-1]
+		return expandCharacterClasses(regex)
 	}
 
 	// Escape special regex characters (except * and ^)
@@ -89,8 +97,18 @@ func PatternToRegex(pattern string) string {
 	return reStr
 }
 
+// Patterns for detecting unsupported WebKit regex features
+var (
+	// Numeric quantifiers: {2}, {2,}, {2,5} - WebKit doesn't support these
+	reNumericQuantifier = regexp.MustCompile(`\{[0-9,]+\}`)
+	// Non-ASCII characters - WebKit doesn't support these in patterns
+	reNonASCII = regexp.MustCompile(`[^\x00-\x7F]`)
+	// Word boundary assertions - WebKit doesn't support these
+	reWordBoundary = regexp.MustCompile(`\\[bB]`)
+)
+
 // ValidateRegex checks if a regex is valid for WebKit
-// WebKit has a subset of regex features
+// WebKit has a strict subset of regex features
 func ValidateRegex(pattern string) bool {
 	// Try to compile the regex
 	_, err := regexp.Compile(pattern)
@@ -98,12 +116,12 @@ func ValidateRegex(pattern string) bool {
 		return false
 	}
 
-	// WebKit doesn't support some features
+	// WebKit doesn't support these assertion/group patterns
 	unsupported := []string{
 		`(?<!`, // negative lookbehind
 		`(?<=`, // positive lookbehind
-		`(?=`,  // lookahead (limited support)
-		`(?!`,  // negative lookahead (limited support)
+		`(?=`,  // positive lookahead
+		`(?!`,  // negative lookahead
 		`\p{`,  // unicode properties
 		`\P{`,  // negated unicode properties
 		`(?P<`, // named groups
@@ -118,6 +136,21 @@ func ValidateRegex(pattern string) bool {
 
 	// Check for disjunctions (| outside character classes)
 	if containsDisjunction(pattern) {
+		return false
+	}
+
+	// Check for numeric quantifiers {n}, {n,}, {n,m}
+	if reNumericQuantifier.MatchString(pattern) {
+		return false
+	}
+
+	// Check for non-ASCII characters
+	if reNonASCII.MatchString(pattern) {
+		return false
+	}
+
+	// Check for word boundary assertions \b, \B
+	if reWordBoundary.MatchString(pattern) {
 		return false
 	}
 
@@ -176,4 +209,17 @@ func PatternToRegexEndAnchor(pattern string) string {
 	}
 
 	return regex
+}
+
+// expandCharacterClasses replaces shorthand character classes with explicit equivalents
+// WebKit's Content Blocker regex engine doesn't support \w, \d, \s, etc.
+func expandCharacterClasses(pattern string) string {
+	// Order matters: replace uppercase (negated) first to avoid partial replacements
+	pattern = reNonWordChar.ReplaceAllString(pattern, `[^a-zA-Z0-9_]`)
+	pattern = reWordChar.ReplaceAllString(pattern, `[a-zA-Z0-9_]`)
+	pattern = reNonDigitChar.ReplaceAllString(pattern, `[^0-9]`)
+	pattern = reDigitChar.ReplaceAllString(pattern, `[0-9]`)
+	pattern = reNonSpaceChar.ReplaceAllString(pattern, `[^ \t\n\r\f\v]`)
+	pattern = reSpaceChar.ReplaceAllString(pattern, `[ \t\n\r\f\v]`)
+	return pattern
 }
