@@ -113,12 +113,14 @@ func runConvert(cmd *cobra.Command, args []string) error {
 
 	ctx := context.Background()
 	f := fetcher.New(cfg.HTTP)
-	p := parser.New()
-	c := converter.New()
 	splitter := converter.NewSplitter(cfg.Output.MaxRulesPerFile)
 
 	var allRules []models.WebKitRule
 	results := make(map[string]ListResult)
+
+	// Aggregate skip reasons across all lists
+	totalParseSkips := make(map[string]int)
+	totalConvertSkips := make(map[string]int)
 
 	for _, list := range enabledLists {
 		fmt.Printf("\n  Processing %s...\n", list.Name)
@@ -131,28 +133,55 @@ func runConvert(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Printf("    Downloaded: %d bytes\n", len(data))
 
-		// Parse
+		// Parse (fresh parser per list for accurate stats)
+		p := parser.New()
 		filters, err := p.Parse(bytes.NewReader(data))
 		if err != nil {
 			fmt.Printf("    ERROR parsing: %v\n", err)
 			continue
 		}
 		pStats := p.Stats()
-		if verbose {
-			fmt.Printf("    Parsed: %d filters (network: %d, cosmetic: %d, skipped: %d)\n",
-				pStats.Total, pStats.Network, pStats.Cosmetic, pStats.Unsupported)
-		}
 
-		// Convert
+		// Convert (fresh converter per list for accurate stats)
+		c := converter.New()
 		rules := c.Convert(filters)
 		cStats := c.Stats()
-		fmt.Printf("    Converted: %d rules (skipped: %d)\n", cStats.Converted, cStats.Skipped)
+
+		totalSkipped := pStats.Unsupported + cStats.Skipped
+		fmt.Printf("    Converted: %d rules (skipped: %d)\n", len(rules), totalSkipped)
+
+		if verbose {
+			fmt.Printf("    Parsed: %d total, %d network, %d cosmetic, %d exceptions\n",
+				pStats.Total, pStats.Network, pStats.Cosmetic, pStats.Exception)
+			if len(pStats.SkipReasons) > 0 {
+				fmt.Printf("    Parse skips:\n")
+				for reason, count := range pStats.SkipReasons {
+					fmt.Printf("      - %s: %d\n", reason, count)
+					totalParseSkips[reason] += count
+				}
+			}
+			if len(cStats.SkipReasons) > 0 {
+				fmt.Printf("    Convert skips:\n")
+				for reason, count := range cStats.SkipReasons {
+					fmt.Printf("      - %s: %d\n", reason, count)
+					totalConvertSkips[reason] += count
+				}
+			}
+		} else {
+			// Still aggregate for summary
+			for reason, count := range pStats.SkipReasons {
+				totalParseSkips[reason] += count
+			}
+			for reason, count := range cStats.SkipReasons {
+				totalConvertSkips[reason] += count
+			}
+		}
 
 		results[list.Name] = ListResult{
-			Name:        list.Name,
-			URL:         list.URL,
-			RulesCount:  len(rules),
-			SkippedCount: cStats.Skipped,
+			Name:         list.Name,
+			URL:          list.URL,
+			RulesCount:   len(rules),
+			SkippedCount: totalSkipped,
 		}
 
 		if !dryRun {
@@ -166,6 +195,17 @@ func runConvert(cmd *cobra.Command, args []string) error {
 		}
 
 		allRules = append(allRules, rules...)
+	}
+
+	// Show skip summary
+	if len(totalParseSkips) > 0 || len(totalConvertSkips) > 0 {
+		fmt.Printf("\nSkipped filters summary:\n")
+		for reason, count := range totalParseSkips {
+			fmt.Printf("  %s: %d\n", reason, count)
+		}
+		for reason, count := range totalConvertSkips {
+			fmt.Printf("  %s: %d\n", reason, count)
+		}
 	}
 
 	// Deduplicate combined rules

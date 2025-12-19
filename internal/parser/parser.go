@@ -21,11 +21,32 @@ type Stats struct {
 	Cosmetic    int
 	Comments    int
 	Unsupported int
+	SkipReasons map[string]int // Detailed breakdown of skipped filters
 }
+
+// SkipReason constants
+const (
+	SkipScriptlet        = "scriptlet (##+js)"
+	SkipHTMLFilter       = "html-filter (##^)"
+	SkipProcedural       = "procedural (:has, :xpath, etc)"
+	SkipUnsupportedOpt   = "unsupported-option (redirect, csp, etc)"
+	SkipInvalidRegex     = "invalid-regex"
+	SkipCosmeticException = "cosmetic-exception (#@#)"
+)
 
 // New creates a new parser
 func New() *Parser {
-	return &Parser{}
+	return &Parser{
+		stats: Stats{
+			SkipReasons: make(map[string]int),
+		},
+	}
+}
+
+// skip records a skipped filter with reason
+func (p *Parser) skip(reason string) models.Filter {
+	p.stats.SkipReasons[reason]++
+	return models.Filter{Type: models.FilterTypeUnsupported}
 }
 
 // Stats returns parsing statistics
@@ -77,17 +98,17 @@ func (p *Parser) parseLine(line string) models.Filter {
 
 	// Scriptlet injection - unsupported
 	if strings.Contains(line, "##+js(") || strings.Contains(line, "#@#+js(") {
-		return models.Filter{Type: models.FilterTypeUnsupported, Raw: line}
+		return p.skip(SkipScriptlet)
 	}
 
 	// HTML filtering - unsupported
 	if strings.Contains(line, "##^") || strings.Contains(line, "#@#^") {
-		return models.Filter{Type: models.FilterTypeUnsupported, Raw: line}
+		return p.skip(SkipHTMLFilter)
 	}
 
 	// Procedural cosmetic filters - unsupported
 	if containsProcedural(line) {
-		return models.Filter{Type: models.FilterTypeUnsupported, Raw: line}
+		return p.skip(SkipProcedural)
 	}
 
 	// Cosmetic filters
@@ -171,7 +192,7 @@ func (p *Parser) parseNetwork(line string, isException bool) models.Filter {
 
 				// Check for unsupported options
 				if hasUnsupportedOptions(optPart) {
-					return models.Filter{Type: models.FilterTypeUnsupported, Raw: line}
+					return p.skip(SkipUnsupportedOpt)
 				}
 			}
 		}
