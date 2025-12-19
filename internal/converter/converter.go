@@ -13,13 +13,31 @@ type Converter struct {
 
 // Stats tracks conversion statistics
 type Stats struct {
-	Converted int
-	Skipped   int
+	Converted   int
+	Skipped     int
+	SkipReasons map[string]int
 }
+
+// Skip reason constants
+const (
+	SkipInvalidRegex      = "invalid-regex"
+	SkipCosmeticException = "cosmetic-exception"
+	SkipEmptySelector     = "empty-selector"
+)
 
 // New creates a new converter
 func New() *Converter {
-	return &Converter{}
+	return &Converter{
+		stats: Stats{
+			SkipReasons: make(map[string]int),
+		},
+	}
+}
+
+// skip records a skipped filter with reason
+func (c *Converter) skip(reason string) {
+	c.stats.Skipped++
+	c.stats.SkipReasons[reason]++
 }
 
 // Stats returns conversion statistics
@@ -33,24 +51,25 @@ func (c *Converter) Convert(filters []models.Filter) []models.WebKitRule {
 
 	for _, f := range filters {
 		var rule *models.WebKitRule
-		var err error
+		var skipReason string
 
 		switch f.Type {
 		case models.FilterTypeNetwork:
-			rule, err = c.convertNetwork(f, false)
+			rule, skipReason = c.convertNetwork(f, false)
 		case models.FilterTypeException:
-			rule, err = c.convertNetwork(f, true)
+			rule, skipReason = c.convertNetwork(f, true)
 		case models.FilterTypeCosmetic:
-			rule, err = c.convertCosmetic(f, false)
+			rule, skipReason = c.convertCosmetic(f, false)
 		case models.FilterTypeCosmeticException:
-			rule, err = c.convertCosmetic(f, true)
+			rule, skipReason = c.convertCosmetic(f, true)
 		default:
-			c.stats.Skipped++
 			continue
 		}
 
-		if err != nil || rule == nil {
-			c.stats.Skipped++
+		if rule == nil {
+			if skipReason != "" {
+				c.skip(skipReason)
+			}
 			continue
 		}
 
@@ -62,12 +81,12 @@ func (c *Converter) Convert(filters []models.Filter) []models.WebKitRule {
 }
 
 // convertNetwork converts a network filter to a WebKit rule
-func (c *Converter) convertNetwork(f models.Filter, isException bool) (*models.WebKitRule, error) {
+func (c *Converter) convertNetwork(f models.Filter, isException bool) (*models.WebKitRule, string) {
 	regex := PatternToRegex(f.Pattern)
 
 	// Validate the regex is WebKit-compatible
 	if !ValidateRegex(regex) {
-		return nil, nil
+		return nil, SkipInvalidRegex
 	}
 
 	rule := &models.WebKitRule{
@@ -112,20 +131,18 @@ func (c *Converter) convertNetwork(f models.Filter, isException bool) (*models.W
 		rule.Trigger.UnlessDomain = normalizeDomains(f.Options.ExcludeDomains)
 	}
 
-	return rule, nil
+	return rule, ""
 }
 
 // convertCosmetic converts a cosmetic filter to a WebKit rule
-func (c *Converter) convertCosmetic(f models.Filter, isException bool) (*models.WebKitRule, error) {
+func (c *Converter) convertCosmetic(f models.Filter, isException bool) (*models.WebKitRule, string) {
 	if f.Selector == "" {
-		return nil, nil
+		return nil, SkipEmptySelector
 	}
 
-	// Exception cosmetic filters - use ignore-previous-rules
+	// Exception cosmetic filters - WebKit doesn't have a direct equivalent
 	if isException {
-		// Cosmetic exceptions are tricky - we'll skip them for now
-		// as WebKit doesn't have a direct equivalent
-		return nil, nil
+		return nil, SkipCosmeticException
 	}
 
 	rule := &models.WebKitRule{
@@ -156,7 +173,7 @@ func (c *Converter) convertCosmetic(f models.Filter, isException bool) (*models.
 		}
 	}
 
-	return rule, nil
+	return rule, ""
 }
 
 // normalizeDomains adds * prefix for wildcard matching
