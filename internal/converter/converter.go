@@ -50,38 +50,39 @@ func (c *Converter) Convert(filters []models.Filter) []models.WebKitRule {
 	var rules []models.WebKitRule
 
 	for _, f := range filters {
-		var rule *models.WebKitRule
+		var convertedRules []models.WebKitRule
 		var skipReason string
 
 		switch f.Type {
 		case models.FilterTypeNetwork:
-			rule, skipReason = c.convertNetwork(f, false)
+			convertedRules, skipReason = c.convertNetwork(f, false)
 		case models.FilterTypeException:
-			rule, skipReason = c.convertNetwork(f, true)
+			convertedRules, skipReason = c.convertNetwork(f, true)
 		case models.FilterTypeCosmetic:
-			rule, skipReason = c.convertCosmetic(f, false)
+			convertedRules, skipReason = c.convertCosmetic(f, false)
 		case models.FilterTypeCosmeticException:
-			rule, skipReason = c.convertCosmetic(f, true)
+			convertedRules, skipReason = c.convertCosmetic(f, true)
 		default:
 			continue
 		}
 
-		if rule == nil {
+		if len(convertedRules) == 0 {
 			if skipReason != "" {
 				c.skip(skipReason)
 			}
 			continue
 		}
 
-		c.stats.Converted++
-		rules = append(rules, *rule)
+		c.stats.Converted += len(convertedRules)
+		rules = append(rules, convertedRules...)
 	}
 
 	return rules
 }
 
-// convertNetwork converts a network filter to a WebKit rule
-func (c *Converter) convertNetwork(f models.Filter, isException bool) (*models.WebKitRule, string) {
+// convertNetwork converts a network filter to WebKit rules
+// Returns multiple rules if splitting is needed (e.g., both if-domain and unless-domain)
+func (c *Converter) convertNetwork(f models.Filter, isException bool) ([]models.WebKitRule, string) {
 	regex := PatternToRegex(f.Pattern)
 
 	// Validate the regex is WebKit-compatible
@@ -89,53 +90,94 @@ func (c *Converter) convertNetwork(f models.Filter, isException bool) (*models.W
 		return nil, SkipInvalidRegex
 	}
 
-	rule := &models.WebKitRule{
-		Trigger: models.WebKitTrigger{
-			URLFilter: regex,
-		},
-		Action: models.WebKitAction{
-			Type: models.ActionBlock,
-		},
-	}
-
-	// Exception rules use ignore-previous-rules
+	// Determine action type
+	actionType := models.ActionBlock
 	if isException {
-		rule.Action.Type = models.ActionIgnorePreviousRule
+		actionType = models.ActionIgnorePreviousRule
 	}
 
-	// Apply options
+	// Build base trigger options
+	var caseSensitive *bool
 	if f.Options.MatchCase {
 		t := true
-		rule.Trigger.URLFilterIsCaseSensitive = &t
+		caseSensitive = &t
 	}
 
-	// Resource types
+	var resourceType []string
 	if len(f.Options.ResourceTypes) > 0 {
-		rule.Trigger.ResourceType = f.Options.ResourceTypes
+		resourceType = f.Options.ResourceTypes
 	}
 
-	// Load type (first/third party)
+	var loadType []string
 	if f.Options.ThirdParty != nil {
 		if *f.Options.ThirdParty {
-			rule.Trigger.LoadType = []string{models.LoadThirdParty}
+			loadType = []string{models.LoadThirdParty}
 		} else {
-			rule.Trigger.LoadType = []string{models.LoadFirstParty}
+			loadType = []string{models.LoadFirstParty}
 		}
 	}
 
-	// Domain restrictions
-	if len(f.Options.Domains) > 0 {
+	hasDomains := len(f.Options.Domains) > 0
+	hasExcludeDomains := len(f.Options.ExcludeDomains) > 0
+
+	// WebKit only allows ONE of: if-domain, unless-domain, if-top-url, unless-top-url
+	// If both domain types are present, we need to split into separate rules
+	if hasDomains && hasExcludeDomains {
+		var rules []models.WebKitRule
+
+		// Rule 1: Apply to included domains only
+		rule1 := models.WebKitRule{
+			Trigger: models.WebKitTrigger{
+				URLFilter:                regex,
+				URLFilterIsCaseSensitive: caseSensitive,
+				ResourceType:             resourceType,
+				LoadType:                 loadType,
+				IfDomain:                 normalizeDomains(f.Options.Domains),
+			},
+			Action: models.WebKitAction{Type: actionType},
+		}
+		rules = append(rules, rule1)
+
+		// Rule 2: Apply everywhere except excluded domains
+		rule2 := models.WebKitRule{
+			Trigger: models.WebKitTrigger{
+				URLFilter:                regex,
+				URLFilterIsCaseSensitive: caseSensitive,
+				ResourceType:             resourceType,
+				LoadType:                 loadType,
+				UnlessDomain:             normalizeDomains(f.Options.ExcludeDomains),
+			},
+			Action: models.WebKitAction{Type: actionType},
+		}
+		rules = append(rules, rule2)
+
+		return rules, ""
+	}
+
+	// Single rule case - only one or no domain condition
+	rule := models.WebKitRule{
+		Trigger: models.WebKitTrigger{
+			URLFilter:                regex,
+			URLFilterIsCaseSensitive: caseSensitive,
+			ResourceType:             resourceType,
+			LoadType:                 loadType,
+		},
+		Action: models.WebKitAction{Type: actionType},
+	}
+
+	if hasDomains {
 		rule.Trigger.IfDomain = normalizeDomains(f.Options.Domains)
 	}
-	if len(f.Options.ExcludeDomains) > 0 {
+	if hasExcludeDomains {
 		rule.Trigger.UnlessDomain = normalizeDomains(f.Options.ExcludeDomains)
 	}
 
-	return rule, ""
+	return []models.WebKitRule{rule}, ""
 }
 
-// convertCosmetic converts a cosmetic filter to a WebKit rule
-func (c *Converter) convertCosmetic(f models.Filter, isException bool) (*models.WebKitRule, string) {
+// convertCosmetic converts a cosmetic filter to WebKit rules
+// Returns multiple rules if splitting is needed (e.g., both if-domain and unless-domain)
+func (c *Converter) convertCosmetic(f models.Filter, isException bool) ([]models.WebKitRule, string) {
 	if f.Selector == "" {
 		return nil, SkipEmptySelector
 	}
@@ -145,7 +187,55 @@ func (c *Converter) convertCosmetic(f models.Filter, isException bool) (*models.
 		return nil, SkipCosmeticException
 	}
 
-	rule := &models.WebKitRule{
+	// Parse domains into include/exclude lists
+	var include, exclude []string
+	for _, d := range f.Domains {
+		if strings.HasPrefix(d, "~") {
+			exclude = append(exclude, normalizeDomain(d[1:]))
+		} else {
+			include = append(include, normalizeDomain(d))
+		}
+	}
+
+	hasInclude := len(include) > 0
+	hasExclude := len(exclude) > 0
+
+	// WebKit only allows ONE of: if-domain, unless-domain, if-top-url, unless-top-url
+	// If both domain types are present, we need to split into separate rules
+	if hasInclude && hasExclude {
+		var rules []models.WebKitRule
+
+		// Rule 1: Apply to included domains only
+		rule1 := models.WebKitRule{
+			Trigger: models.WebKitTrigger{
+				URLFilter: ".*",
+				IfDomain:  include,
+			},
+			Action: models.WebKitAction{
+				Type:     models.ActionCSSDisplayNone,
+				Selector: f.Selector,
+			},
+		}
+		rules = append(rules, rule1)
+
+		// Rule 2: Apply everywhere except excluded domains
+		rule2 := models.WebKitRule{
+			Trigger: models.WebKitTrigger{
+				URLFilter:    ".*",
+				UnlessDomain: exclude,
+			},
+			Action: models.WebKitAction{
+				Type:     models.ActionCSSDisplayNone,
+				Selector: f.Selector,
+			},
+		}
+		rules = append(rules, rule2)
+
+		return rules, ""
+	}
+
+	// Single rule case
+	rule := models.WebKitRule{
 		Trigger: models.WebKitTrigger{
 			URLFilter: ".*",
 		},
@@ -155,25 +245,14 @@ func (c *Converter) convertCosmetic(f models.Filter, isException bool) (*models.
 		},
 	}
 
-	// Domain-specific cosmetic filters
-	if len(f.Domains) > 0 {
-		var include, exclude []string
-		for _, d := range f.Domains {
-			if strings.HasPrefix(d, "~") {
-				exclude = append(exclude, normalizeDomain(d[1:]))
-			} else {
-				include = append(include, normalizeDomain(d))
-			}
-		}
-		if len(include) > 0 {
-			rule.Trigger.IfDomain = include
-		}
-		if len(exclude) > 0 {
-			rule.Trigger.UnlessDomain = exclude
-		}
+	if hasInclude {
+		rule.Trigger.IfDomain = include
+	}
+	if hasExclude {
+		rule.Trigger.UnlessDomain = exclude
 	}
 
-	return rule, ""
+	return []models.WebKitRule{rule}, ""
 }
 
 // normalizeDomains adds * prefix for wildcard matching

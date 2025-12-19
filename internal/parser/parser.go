@@ -26,11 +26,11 @@ type Stats struct {
 
 // SkipReason constants
 const (
-	SkipScriptlet        = "scriptlet (##+js)"
-	SkipHTMLFilter       = "html-filter (##^)"
-	SkipProcedural       = "procedural (:has, :xpath, etc)"
-	SkipUnsupportedOpt   = "unsupported-option (redirect, csp, etc)"
-	SkipInvalidRegex     = "invalid-regex"
+	SkipScriptlet         = "scriptlet (##+js)"
+	SkipHTMLFilter        = "html-filter (##^)"
+	SkipProcedural        = "procedural (:has, :xpath, etc)"
+	SkipUnsupportedOpt    = "unsupported-option (redirect, csp, etc)"
+	SkipInvalidRegex      = "invalid-regex"
 	SkipCosmeticException = "cosmetic-exception (#@#)"
 )
 
