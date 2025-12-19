@@ -7,8 +7,8 @@ import (
 
 // Regex patterns ported from uBlock's make-rulesets.js:196-234
 const (
-	// Separator matches any non-alphanumeric character or end of string
-	restrSeparator = `(?:[^%.0-9a-z_-]|$)`
+	// Separator matches any non-alphanumeric character (WebKit doesn't support disjunctions)
+	restrSeparator = `[^%.0-9a-z_-]`
 	// Hostname anchor for patterns starting with ||
 	restrHostnameAnchor1 = `^[a-z-]+://(?:[^/?#]+\.)?`
 	// Hostname anchor for patterns starting with ||.
@@ -116,5 +116,64 @@ func ValidateRegex(pattern string) bool {
 		}
 	}
 
+	// Check for disjunctions (| outside character classes)
+	if containsDisjunction(pattern) {
+		return false
+	}
+
 	return true
+}
+
+// containsDisjunction checks if a regex contains | outside of character classes
+func containsDisjunction(pattern string) bool {
+	inCharClass := false
+	escaped := false
+
+	for _, ch := range pattern {
+		if escaped {
+			escaped = false
+			continue
+		}
+		if ch == '\\' {
+			escaped = true
+			continue
+		}
+		if ch == '[' && !inCharClass {
+			inCharClass = true
+			continue
+		}
+		if ch == ']' && inCharClass {
+			inCharClass = false
+			continue
+		}
+		if ch == '|' && !inCharClass {
+			return true
+		}
+	}
+	return false
+}
+
+// PatternEndsWithSeparator checks if the original pattern ends with ^ separator
+func PatternEndsWithSeparator(pattern string) bool {
+	// Strip right anchor first
+	s := strings.TrimSuffix(pattern, "|")
+	return strings.HasSuffix(s, "^")
+}
+
+// PatternToRegexEndAnchor creates a variant regex with $ end anchor instead of separator
+// Used when original pattern ends with ^, to match URLs ending at the pattern
+func PatternToRegexEndAnchor(pattern string) string {
+	// Strip the trailing ^ and any right anchor
+	s := strings.TrimSuffix(pattern, "|")
+	s = strings.TrimSuffix(s, "^")
+
+	// Convert without the separator, then add $ end anchor
+	regex := PatternToRegex(s)
+
+	// Add end anchor if not already present
+	if !strings.HasSuffix(regex, "$") {
+		regex = regex + "$"
+	}
+
+	return regex
 }
