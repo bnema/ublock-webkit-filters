@@ -100,14 +100,14 @@ func ValidateRegex(pattern string) bool {
 
 	// WebKit doesn't support some features
 	unsupported := []string{
-		`(?<!`,  // negative lookbehind
-		`(?<=`,  // positive lookbehind
-		`(?=`,   // lookahead (limited support)
-		`(?!`,   // negative lookahead (limited support)
-		`\p{`,   // unicode properties
-		`\P{`,   // negated unicode properties
-		`(?P<`,  // named groups
-		`(?<`,   // named groups alternate syntax
+		`(?<!`, // negative lookbehind
+		`(?<=`, // positive lookbehind
+		`(?=`,  // lookahead (limited support)
+		`(?!`,  // negative lookahead (limited support)
+		`\p{`,  // unicode properties
+		`\P{`,  // negated unicode properties
+		`(?P<`, // named groups
+		`(?<`,  // named groups alternate syntax
 	}
 
 	for _, u := range unsupported {
