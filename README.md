@@ -14,6 +14,18 @@ Filters are updated daily via GitHub Actions and published as release artifacts.
 
 Get the latest converted filters from [Releases](https://github.com/bnema/ublock-webkit-filters/releases/latest).
 
+### Direct URLs (always latest)
+
+```bash
+# Combined filters (all lists merged)
+https://github.com/bnema/ublock-webkit-filters/releases/latest/download/combined-part1.json
+https://github.com/bnema/ublock-webkit-filters/releases/latest/download/combined-part2.json
+https://github.com/bnema/ublock-webkit-filters/releases/latest/download/combined-part3.json
+
+# Manifest with metadata
+https://github.com/bnema/ublock-webkit-filters/releases/latest/download/manifest.json
+```
+
 ### Files
 
 | File | Description |
