@@ -1,0 +1,67 @@
+# uBlock to WebKit Filters Converter Configuration
+
+# HTTP client settings
+[http]
+timeout = "30s"
+retries = 3
+
+# Output settings
+[output]
+max_rules_per_file = 50000
+generate_combined = true
+generate_manifest = true
+
+# Filter lists to convert
+# Set enabled = false to skip a list
+
+[[lists]]
+name = "easylist"
+url = "https://easylist.to/easylist/easylist.txt"
+enabled = true
+
+[[lists]]
+name = "easyprivacy"
+url = "https://easylist.to/easylist/easyprivacy.txt"
+enabled = true
+
+[[lists]]
+name = "ublock-filters"
+url = "https://ublockorigin.github.io/uAssets/filters/filters.txt"
+enabled = true
+
+[[lists]]
+name = "ublock-privacy"
+url = "https://ublockorigin.github.io/uAssets/filters/privacy.txt"
+enabled = true
+
+[[lists]]
+name = "ublock-badware"
+url = "https://ublockorigin.github.io/uAssets/filters/badware.txt"
+enabled = true
+
+[[lists]]
+name = "ublock-unbreak"
+url = "https://ublockorigin.github.io/uAssets/filters/unbreak.txt"
+enabled = true
+
+[[lists]]
+name = "ublock-quick-fixes"
+url = "https://ublockorigin.github.io/uAssets/filters/quick-fixes.txt"
+enabled = true
+
+[[lists]]
+name = "peter-lowe"
+url = "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=1&mimetype=plaintext"
+enabled = true
+
+# Optional lists (disabled by default)
+
+[[lists]]
+name = "ublock-annoyances"
+url = "https://ublockorigin.github.io/uAssets/filters/annoyances.txt"
+enabled = false
+
+[[lists]]
+name = "easylist-cookies"
+url = "https://secure.fanboy.co.nz/fanboy-cookiemonster_ubo.txt"
+enabled = false
