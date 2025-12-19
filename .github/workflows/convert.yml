@@ -1,0 +1,74 @@
+name: Convert Filters
+
+on:
+  schedule:
+    - cron: '0 4 * * *'  # Daily at 4 AM UTC
+  workflow_dispatch:      # Manual trigger
+  push:
+    branches: [main]
+    paths:
+      - 'configs/**'
+      - 'internal/**'
+      - 'cmd/**'
+      - '.github/workflows/convert.yml'
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Build
+        run: go build -o converter ./cmd/ublock-webkit-filters
+
+      - name: Convert filters
+        run: ./converter convert --output ./output --verbose
+
+      - name: Generate checksums
+        run: |
+          cd output
+          sha256sum *.json > checksums.txt
+
+      - name: Get date
+        id: date
+        run: echo "date=$(date +'%Y.%m.%d')" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.date.outputs.date }}
+          name: Filters ${{ steps.date.outputs.date }}
+          body: |
+            ## Daily filter update for ${{ steps.date.outputs.date }}
+
+            ### Files
+            - `combined-part*.json` - All enabled lists merged and deduplicated
+            - `easylist.json` - EasyList ad blocking
+            - `easyprivacy.json` - EasyPrivacy tracker blocking
+            - `ublock-*.json` - uBlock Origin filters
+            - `manifest.json` - Metadata and rule counts
+            - `checksums.txt` - SHA256 checksums
+
+            ### Usage
+            Download the JSON files and load them into WebKit's `UserContentFilterStore`.
+
+            ```go
+            // Example with puregotk-webkit
+            store := webkit.NewUserContentFilterStore(dataDir)
+            store.Save("combined", jsonData, nil, callback)
+            ```
+          files: |
+            output/*.json
+            output/checksums.txt
+          make_latest: true
+          draft: false
+          prerelease: false
