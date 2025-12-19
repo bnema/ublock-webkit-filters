@@ -81,13 +81,25 @@ func (c *Converter) Convert(filters []models.Filter) []models.WebKitRule {
 }
 
 // convertNetwork converts a network filter to WebKit rules
-// Returns multiple rules if splitting is needed (e.g., both if-domain and unless-domain)
+// Returns multiple rules if splitting is needed (e.g., both if-domain and unless-domain,
+// or patterns ending with ^ separator which need both separator-char and end-of-string variants)
 func (c *Converter) convertNetwork(f models.Filter, isException bool) ([]models.WebKitRule, string) {
 	regex := PatternToRegex(f.Pattern)
 
 	// Validate the regex is WebKit-compatible
 	if !ValidateRegex(regex) {
 		return nil, SkipInvalidRegex
+	}
+
+	// Check if we need an end-anchor variant (pattern ends with ^ separator)
+	needsEndAnchorVariant := PatternEndsWithSeparator(f.Pattern)
+	var endAnchorRegex string
+	if needsEndAnchorVariant {
+		endAnchorRegex = PatternToRegexEndAnchor(f.Pattern)
+		if !ValidateRegex(endAnchorRegex) {
+			// If end-anchor variant is invalid, just use the separator version
+			needsEndAnchorVariant = false
+		}
 	}
 
 	// Determine action type
@@ -125,7 +137,7 @@ func (c *Converter) convertNetwork(f models.Filter, isException bool) ([]models.
 	if hasDomains && hasExcludeDomains {
 		var rules []models.WebKitRule
 
-		// Rule 1: Apply to included domains only
+		// Rule 1: Apply to included domains only (separator char variant)
 		rule1 := models.WebKitRule{
 			Trigger: models.WebKitTrigger{
 				URLFilter:                regex,
@@ -138,7 +150,22 @@ func (c *Converter) convertNetwork(f models.Filter, isException bool) ([]models.
 		}
 		rules = append(rules, rule1)
 
-		// Rule 2: Apply everywhere except excluded domains
+		// Rule 1b: End-anchor variant for included domains
+		if needsEndAnchorVariant {
+			rule1b := models.WebKitRule{
+				Trigger: models.WebKitTrigger{
+					URLFilter:                endAnchorRegex,
+					URLFilterIsCaseSensitive: caseSensitive,
+					ResourceType:             resourceType,
+					LoadType:                 loadType,
+					IfDomain:                 normalizeDomains(f.Options.Domains),
+				},
+				Action: models.WebKitAction{Type: actionType},
+			}
+			rules = append(rules, rule1b)
+		}
+
+		// Rule 2: Apply everywhere except excluded domains (separator char variant)
 		rule2 := models.WebKitRule{
 			Trigger: models.WebKitTrigger{
 				URLFilter:                regex,
@@ -151,10 +178,28 @@ func (c *Converter) convertNetwork(f models.Filter, isException bool) ([]models.
 		}
 		rules = append(rules, rule2)
 
+		// Rule 2b: End-anchor variant for excluded domains
+		if needsEndAnchorVariant {
+			rule2b := models.WebKitRule{
+				Trigger: models.WebKitTrigger{
+					URLFilter:                endAnchorRegex,
+					URLFilterIsCaseSensitive: caseSensitive,
+					ResourceType:             resourceType,
+					LoadType:                 loadType,
+					UnlessDomain:             normalizeDomains(f.Options.ExcludeDomains),
+				},
+				Action: models.WebKitAction{Type: actionType},
+			}
+			rules = append(rules, rule2b)
+		}
+
 		return rules, ""
 	}
 
 	// Single rule case - only one or no domain condition
+	var rules []models.WebKitRule
+
+	// Main rule with separator char matching
 	rule := models.WebKitRule{
 		Trigger: models.WebKitTrigger{
 			URLFilter:                regex,
@@ -172,7 +217,31 @@ func (c *Converter) convertNetwork(f models.Filter, isException bool) ([]models.
 		rule.Trigger.UnlessDomain = normalizeDomains(f.Options.ExcludeDomains)
 	}
 
-	return []models.WebKitRule{rule}, ""
+	rules = append(rules, rule)
+
+	// Add end-anchor variant if pattern ends with separator
+	if needsEndAnchorVariant {
+		endRule := models.WebKitRule{
+			Trigger: models.WebKitTrigger{
+				URLFilter:                endAnchorRegex,
+				URLFilterIsCaseSensitive: caseSensitive,
+				ResourceType:             resourceType,
+				LoadType:                 loadType,
+			},
+			Action: models.WebKitAction{Type: actionType},
+		}
+
+		if hasDomains {
+			endRule.Trigger.IfDomain = normalizeDomains(f.Options.Domains)
+		}
+		if hasExcludeDomains {
+			endRule.Trigger.UnlessDomain = normalizeDomains(f.Options.ExcludeDomains)
+		}
+
+		rules = append(rules, endRule)
+	}
+
+	return rules, ""
 }
 
 // convertCosmetic converts a cosmetic filter to WebKit rules
