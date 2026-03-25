@@ -27,3 +27,24 @@ func TestParseFromOptionWithExcludes(t *testing.T) {
 	assert.Equal(t, []string{"scnlog.me"}, filters[0].Options.Domains)
 	assert.Equal(t, []string{"example.com"}, filters[0].Options.ExcludeDomains)
 }
+
+func TestDenyallowIsSkipped(t *testing.T) {
+	p := New()
+	filters, err := p.Parse(strings.NewReader(
+		`*$script,3p,denyallow=cdn77.org|google.com|gstatic.com,domain=pingit.com`,
+	))
+	assert.NoError(t, err)
+	// Filter should be skipped (unsupported option)
+	assert.Empty(t, filters)
+	assert.Equal(t, 1, p.Stats().Unsupported)
+}
+
+func TestDenyallowWithFromIsSkipped(t *testing.T) {
+	p := New()
+	filters, err := p.Parse(strings.NewReader(
+		`$image,3p,denyallow=fpbns.net|globalcdn.co,from=pussyspace.com`,
+	))
+	assert.NoError(t, err)
+	assert.Empty(t, filters)
+	assert.Equal(t, 1, p.Stats().Unsupported)
+}

@@ -319,6 +319,7 @@ func hasUnsupportedOptions(s string) bool {
 		"csp=", "removeparam=", "replace=",
 		"header=", "method=", "to=",
 		"permissions=", "uritransform=",
+		"denyallow=",
 	}
 	for _, u := range unsupported {
 		if strings.Contains(s, u) {
