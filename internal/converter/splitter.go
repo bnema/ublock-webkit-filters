@@ -2,6 +2,7 @@ package converter
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/bnema/ublock-webkit-filters/internal/models"
 )
@@ -48,6 +49,17 @@ func (s *Splitter) Split(rules []models.WebKitRule, baseName string) map[string]
 	return result
 }
 
+// sortedKey returns a sorted copy of a string slice for canonical key building
+func sortedKey(s []string) []string {
+	if len(s) == 0 {
+		return s
+	}
+	c := make([]string, len(s))
+	copy(c, s)
+	sort.Strings(c)
+	return c
+}
+
 // Deduplicate removes duplicate rules based on their complete trigger+action
 func Deduplicate(rules []models.WebKitRule) []models.WebKitRule {
 	seen := make(map[string]bool)
@@ -64,10 +76,10 @@ func Deduplicate(rules []models.WebKitRule) []models.WebKitRule {
 			r.Trigger.URLFilter,
 			r.Action.Type,
 			r.Action.Selector,
-			r.Trigger.IfDomain,
-			r.Trigger.UnlessDomain,
-			r.Trigger.ResourceType,
-			r.Trigger.LoadType,
+			sortedKey(r.Trigger.IfDomain),
+			sortedKey(r.Trigger.UnlessDomain),
+			sortedKey(r.Trigger.ResourceType),
+			sortedKey(r.Trigger.LoadType),
 			caseSensitive,
 		)
 

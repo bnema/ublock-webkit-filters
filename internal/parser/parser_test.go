@@ -48,3 +48,13 @@ func TestDenyallowWithFromIsSkipped(t *testing.T) {
 	assert.Empty(t, filters)
 	assert.Equal(t, 1, p.Stats().Unsupported)
 }
+
+func TestRegexDomainIsSkipped(t *testing.T) {
+	p := New()
+	filters, err := p.Parse(strings.NewReader(
+		`||example.com^$script,from=/img[a-z]{3,5}\.buzz/`,
+	))
+	assert.NoError(t, err)
+	assert.Empty(t, filters, "filter with regex domain value must be skipped")
+	assert.Equal(t, 1, p.Stats().Unsupported)
+}

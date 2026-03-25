@@ -82,6 +82,29 @@ func TestDeduplicateRemovesTrueDuplicates(t *testing.T) {
 	assert.Len(t, result, 1, "Identical rules should be deduplicated")
 }
 
+func TestDeduplicateIgnoresSliceOrder(t *testing.T) {
+	rules := []models.WebKitRule{
+		{
+			Trigger: models.WebKitTrigger{
+				URLFilter: ".*",
+				IfDomain:  []string{"*b.com", "*a.com"},
+			},
+			Action: models.WebKitAction{Type: "block"},
+		},
+		{
+			Trigger: models.WebKitTrigger{
+				URLFilter: ".*",
+				IfDomain:  []string{"*a.com", "*b.com"},
+			},
+			Action: models.WebKitAction{Type: "block"},
+		},
+	}
+
+	result := Deduplicate(rules)
+
+	assert.Len(t, result, 1, "Rules with same domains in different order should be deduplicated")
+}
+
 func TestDeduplicateDistinguishesCaseSensitivity(t *testing.T) {
 	cs := true
 	rules := []models.WebKitRule{

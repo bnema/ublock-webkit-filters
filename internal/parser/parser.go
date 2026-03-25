@@ -326,5 +326,12 @@ func hasUnsupportedOptions(s string) bool {
 			return true
 		}
 	}
+
+	// Regex domain values (domain=/.../ or from=/.../) are not supported
+	// by WebKit and also break our comma-based option splitting
+	if strings.Contains(s, "domain=/") || strings.Contains(s, "from=/") {
+		return true
+	}
+
 	return false
 }
