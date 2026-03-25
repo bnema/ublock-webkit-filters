@@ -82,6 +82,19 @@ func (c *Converter) Convert(filters []models.Filter) []models.WebKitRule {
 	return rules
 }
 
+// containsEntityDomain checks if any domain uses uBO entity matching (e.g. "pingit.*")
+// WebKit domain conditions only support leading * as subdomain wildcard.
+// An internal/trailing .* is uBO entity matching (any TLD) which has no WebKit equivalent.
+func containsEntityDomain(domains []string) bool {
+	for _, d := range domains {
+		// Entity matching: domain ends with .* (e.g. "pingit.*", "mylink.*")
+		if strings.HasSuffix(d, ".*") {
+			return true
+		}
+	}
+	return false
+}
+
 // convertNetwork converts a network filter to WebKit rules
 // Returns multiple rules if splitting is needed (e.g., both if-domain and unless-domain,
 // or patterns ending with ^ separator which need both separator-char and end-of-string variants)
@@ -139,6 +152,11 @@ func (c *Converter) convertNetwork(f models.Filter, isException bool) ([]models.
 	// (would require intersection semantics, but split produces union = catastrophic over-block)
 	if hasDomains && hasExcludeDomains {
 		return nil, SkipDomainIntersection
+	}
+
+	// Check for uBO entity matching domains (e.g. "pingit.*") — not representable in WebKit
+	if containsEntityDomain(f.Options.Domains) || containsEntityDomain(f.Options.ExcludeDomains) {
+		return nil, SkipEntityDomain
 	}
 
 	// Single rule case - only one or no domain condition
@@ -209,6 +227,11 @@ func (c *Converter) convertCosmetic(f models.Filter, isException bool) ([]models
 		} else {
 			include = append(include, normalizeDomain(d))
 		}
+	}
+
+	// Check for uBO entity matching domains — not representable in WebKit
+	if containsEntityDomain(f.Domains) {
+		return nil, SkipEntityDomain
 	}
 
 	hasInclude := len(include) > 0
