@@ -198,7 +198,7 @@ func TestNoCatchAllBlockRulesInOutput(t *testing.T) {
 
 	// Verify no catch-all rules exist
 	for _, r := range rules {
-		if r.Trigger.URLFilter == ".*" && r.Action.Type == "block" {
+		if r.Trigger.URLFilter == ".*" && r.Action.Type == models.ActionBlock {
 			if len(r.Trigger.IfDomain) == 0 && len(r.Trigger.UnlessDomain) == 0 {
 				t.Errorf("Found catch-all block rule with no domain restriction: %+v", r)
 			}
