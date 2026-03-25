@@ -125,3 +125,86 @@ func TestDirectConversionWithRegex(t *testing.T) {
 	assert.NotEmpty(t, rules, "Expected rule with open numeric quantifier to be converted")
 	assert.Equal(t, 0, c.stats.Skipped)
 }
+
+func TestRegressionPingitFilter(t *testing.T) {
+	// Real filter that caused GitHub/Google Maps to break
+	p := parser.New()
+	filters, err := p.Parse(strings.NewReader(
+		`*$script,3p,denyallow=cdn77.org|google.com|gstatic.com|recaptcha.net|smartsuppcdn.com|smartsuppchat.com,domain=pingit.*|~pingit.com`,
+	))
+	assert.NoError(t, err)
+	// Must be skipped: has denyallow=
+	assert.Empty(t, filters, "pingit filter with denyallow= must be skipped at parse time")
+}
+
+func TestRegressionMylinkFilter(t *testing.T) {
+	p := parser.New()
+	filters, err := p.Parse(strings.NewReader(
+		`*$script,3p,denyallow=cloudflare.com|cloudflare.net|consensu.org|google.com|googleapis.com|gstatic.com|hcaptcha.com|hwcdn.net|recaptcha.net|twitter.com|x.com,domain=mylink.*|my1ink.*|myl1nk.*|myli3k.*|~mylink.tel`,
+	))
+	assert.NoError(t, err)
+	assert.Empty(t, filters, "mylink filter with denyallow= must be skipped at parse time")
+}
+
+func TestRegressionPussyspaceFilter(t *testing.T) {
+	// This filter uses both from= and denyallow= — denyallow= causes skip
+	p := parser.New()
+	filters, err := p.Parse(strings.NewReader(
+		`$image,3p,denyallow=cdn77.org|fpbns.net|globalcdn.co,from=pussyspace.com|pussyspace.net`,
+	))
+	assert.NoError(t, err)
+	assert.Empty(t, filters, "pussyspace filter with denyallow= must be skipped at parse time")
+}
+
+func TestRegressionScnlogFilter(t *testing.T) {
+	p := parser.New()
+	filters, err := p.Parse(strings.NewReader(
+		`*$script,3p,denyallow=cloudflare.com|cloudflare.net|google.com|googleapis.com|gstatic.com|jwpcdn.com,from=scnlog.me`,
+	))
+	assert.NoError(t, err)
+	assert.Empty(t, filters, "scnlog filter with denyallow= must be skipped at parse time")
+}
+
+func TestRegressionEntityDomainWithoutDenyallow(t *testing.T) {
+	// Exercises converter-level skip (entity domain + include/exclude)
+	// when denyallow= is NOT present — this is the safety net path
+	p := parser.New()
+	filters, err := p.Parse(strings.NewReader(
+		`*$script,3p,domain=pingit.*|~pingit.com`,
+	))
+	assert.NoError(t, err)
+	assert.Len(t, filters, 1, "parser should pass this through (no denyallow=)")
+
+	c := New()
+	rules := c.Convert(filters)
+	assert.Empty(t, rules, "entity domain + include/exclude filter must be skipped at converter level")
+}
+
+func TestNoCatchAllBlockRulesInOutput(t *testing.T) {
+	// Simulate a mix of safe and dangerous filters
+	input := `||ads.example.com^
+*$script,3p,denyallow=google.com,domain=pingit.*|~pingit.com
+||tracking.example.com^$third-party
+*$image,3p,denyallow=cdn77.org,from=pussyspace.com
+||safe-ads.example.com^$image
+`
+	p := parser.New()
+	filters, err := p.Parse(strings.NewReader(input))
+	assert.NoError(t, err)
+
+	c := New()
+	rules := c.Convert(filters)
+	rules = Deduplicate(rules)
+
+	// Verify no catch-all rules exist
+	for _, r := range rules {
+		if r.Trigger.URLFilter == ".*" && r.Action.Type == "block" {
+			if len(r.Trigger.IfDomain) == 0 && len(r.Trigger.UnlessDomain) == 0 {
+				t.Errorf("Found catch-all block rule with no domain restriction: %+v", r)
+			}
+		}
+	}
+
+	// Safe filters should still be converted
+	assert.True(t, len(rules) >= 2, "Safe filters should produce rules, got %d", len(rules))
+}
