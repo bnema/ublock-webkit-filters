@@ -246,6 +246,8 @@ func parseOptions(s string) models.FilterOptions {
 			opts.Important = true
 		case strings.HasPrefix(part, "domain="):
 			opts.Domains, opts.ExcludeDomains = parseDomainOption(part[7:])
+		case strings.HasPrefix(part, "from="):
+			opts.Domains, opts.ExcludeDomains = parseDomainOption(part[5:])
 		default:
 			// Check if it's a resource type
 			if rt := mapResourceType(part); rt != "" {
