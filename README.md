@@ -128,7 +128,7 @@ This project prefers safety over over-blocking: if a uBO filter cannot be repres
 | `##.ad-banner` | `css-display-none` |
 | `$third-party` | `load-type: third-party` |
 | `$script,image` | `resource-type` |
-| `from=example.com|foo.net` | `if-domain` when representable |
+| <code>from=example.com&#124;foo.net</code> | `if-domain` when representable |
 
 ### Not Supported (skipped)
 
