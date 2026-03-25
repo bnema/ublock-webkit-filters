@@ -117,6 +117,8 @@ enabled = true
 
 ## Filter Conversion
 
+This project prefers safety over over-blocking: if a uBO filter cannot be represented faithfully in WebKit content blocker syntax, it is skipped rather than broadened into a more permissive rule.
+
 ### Supported
 
 | uBlock Syntax | WebKit Action |
@@ -126,6 +128,7 @@ enabled = true
 | `##.ad-banner` | `css-display-none` |
 | `$third-party` | `load-type: third-party` |
 | `$script,image` | `resource-type` |
+| `from=example.com|foo.net` | `if-domain` when representable |
 
 ### Not Supported (skipped)
 
@@ -133,6 +136,10 @@ enabled = true
 - HTML filtering: `##^`
 - Procedural cosmetic: `:has()`, `:has-text()`, `:xpath()`
 - Redirects, CSP, removeparam
+- `denyallow=` resource-domain exceptions
+- Mixed include/exclude domain constraints that require intersection semantics not available in WebKit
+- uBO entity-matching domains such as `pingit.*`
+- Regex domain values such as `domain=/.../` or `from=/.../`
 
 ## Default Filter Lists
 
