@@ -8,9 +8,9 @@ import (
 )
 
 // MaxRulesPerFile is Safari/WebKit's limit per content blocker
-const MaxRulesPerFile = 50000
+const MaxRulesPerFile = 150000
 
-// Splitter splits rules into chunks respecting the 50k limit
+// Splitter splits rules into chunks respecting the 150k limit
 type Splitter struct {
 	maxRules int
 }
