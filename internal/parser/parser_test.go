@@ -1,0 +1,60 @@
+package parser
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
+
+func TestParseFromOptionAsDomainAlias(t *testing.T) {
+	p := New()
+	filters, err := p.Parse(strings.NewReader(
+		`$image,3p,from=pussyspace.com|pussyspace.net`,
+	))
+	assert.NoError(t, err)
+	assert.Len(t, filters, 1)
+	assert.Equal(t, []string{"pussyspace.com", "pussyspace.net"}, filters[0].Options.Domains)
+}
+
+func TestParseFromOptionWithExcludes(t *testing.T) {
+	p := New()
+	filters, err := p.Parse(strings.NewReader(
+		`*$script,3p,from=scnlog.me|~example.com`,
+	))
+	assert.NoError(t, err)
+	assert.Len(t, filters, 1)
+	assert.Equal(t, []string{"scnlog.me"}, filters[0].Options.Domains)
+	assert.Equal(t, []string{"example.com"}, filters[0].Options.ExcludeDomains)
+}
+
+func TestDenyallowIsSkipped(t *testing.T) {
+	p := New()
+	filters, err := p.Parse(strings.NewReader(
+		`*$script,3p,denyallow=cdn77.org|google.com|gstatic.com,domain=pingit.com`,
+	))
+	assert.NoError(t, err)
+	// Filter should be skipped (unsupported option)
+	assert.Empty(t, filters)
+	assert.Equal(t, 1, p.Stats().Unsupported)
+}
+
+func TestDenyallowWithFromIsSkipped(t *testing.T) {
+	p := New()
+	filters, err := p.Parse(strings.NewReader(
+		`$image,3p,denyallow=fpbns.net|globalcdn.co,from=pussyspace.com`,
+	))
+	assert.NoError(t, err)
+	assert.Empty(t, filters)
+	assert.Equal(t, 1, p.Stats().Unsupported)
+}
+
+func TestRegexDomainIsSkipped(t *testing.T) {
+	p := New()
+	filters, err := p.Parse(strings.NewReader(
+		`||example.com^$script,from=/img[a-z]{3,5}\.buzz/`,
+	))
+	assert.NoError(t, err)
+	assert.Empty(t, filters, "filter with regex domain value must be skipped")
+	assert.Equal(t, 1, p.Stats().Unsupported)
+}

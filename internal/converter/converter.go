@@ -20,9 +20,11 @@ type Stats struct {
 
 // Skip reason constants
 const (
-	SkipInvalidRegex      = "invalid-regex"
-	SkipCosmeticException = "cosmetic-exception"
-	SkipEmptySelector     = "empty-selector"
+	SkipInvalidRegex       = "invalid-regex"
+	SkipCosmeticException  = "cosmetic-exception"
+	SkipEmptySelector      = "empty-selector"
+	SkipDomainIntersection = "domain-include-and-exclude"
+	SkipEntityDomain       = "entity-domain-unsupported"
 )
 
 // New creates a new converter
@@ -80,6 +82,19 @@ func (c *Converter) Convert(filters []models.Filter) []models.WebKitRule {
 	return rules
 }
 
+// containsEntityDomain checks if any domain uses uBO entity matching (e.g. "pingit.*")
+// WebKit domain conditions only support leading * as subdomain wildcard.
+// An internal/trailing .* is uBO entity matching (any TLD) which has no WebKit equivalent.
+func containsEntityDomain(domains []string) bool {
+	for _, d := range domains {
+		// Entity matching: domain ends with .* (e.g. "pingit.*", "mylink.*")
+		if strings.HasSuffix(d, ".*") {
+			return true
+		}
+	}
+	return false
+}
+
 // convertNetwork converts a network filter to WebKit rules
 // Returns multiple rules if splitting is needed (e.g., both if-domain and unless-domain,
 // or patterns ending with ^ separator which need both separator-char and end-of-string variants)
@@ -132,68 +147,16 @@ func (c *Converter) convertNetwork(f models.Filter, isException bool) ([]models.
 	hasDomains := len(f.Options.Domains) > 0
 	hasExcludeDomains := len(f.Options.ExcludeDomains) > 0
 
-	// WebKit only allows ONE of: if-domain, unless-domain, if-top-url, unless-top-url
-	// If both domain types are present, we need to split into separate rules
+	// WebKit only allows ONE of: if-domain, unless-domain
+	// Filters with both include AND exclude domains cannot be correctly represented
+	// (would require intersection semantics, but split produces union = catastrophic over-block)
 	if hasDomains && hasExcludeDomains {
-		var rules []models.WebKitRule
+		return nil, SkipDomainIntersection
+	}
 
-		// Rule 1: Apply to included domains only (separator char variant)
-		rule1 := models.WebKitRule{
-			Trigger: models.WebKitTrigger{
-				URLFilter:                regex,
-				URLFilterIsCaseSensitive: caseSensitive,
-				ResourceType:             resourceType,
-				LoadType:                 loadType,
-				IfDomain:                 normalizeDomains(f.Options.Domains),
-			},
-			Action: models.WebKitAction{Type: actionType},
-		}
-		rules = append(rules, rule1)
-
-		// Rule 1b: End-anchor variant for included domains
-		if needsEndAnchorVariant {
-			rule1b := models.WebKitRule{
-				Trigger: models.WebKitTrigger{
-					URLFilter:                endAnchorRegex,
-					URLFilterIsCaseSensitive: caseSensitive,
-					ResourceType:             resourceType,
-					LoadType:                 loadType,
-					IfDomain:                 normalizeDomains(f.Options.Domains),
-				},
-				Action: models.WebKitAction{Type: actionType},
-			}
-			rules = append(rules, rule1b)
-		}
-
-		// Rule 2: Apply everywhere except excluded domains (separator char variant)
-		rule2 := models.WebKitRule{
-			Trigger: models.WebKitTrigger{
-				URLFilter:                regex,
-				URLFilterIsCaseSensitive: caseSensitive,
-				ResourceType:             resourceType,
-				LoadType:                 loadType,
-				UnlessDomain:             normalizeDomains(f.Options.ExcludeDomains),
-			},
-			Action: models.WebKitAction{Type: actionType},
-		}
-		rules = append(rules, rule2)
-
-		// Rule 2b: End-anchor variant for excluded domains
-		if needsEndAnchorVariant {
-			rule2b := models.WebKitRule{
-				Trigger: models.WebKitTrigger{
-					URLFilter:                endAnchorRegex,
-					URLFilterIsCaseSensitive: caseSensitive,
-					ResourceType:             resourceType,
-					LoadType:                 loadType,
-					UnlessDomain:             normalizeDomains(f.Options.ExcludeDomains),
-				},
-				Action: models.WebKitAction{Type: actionType},
-			}
-			rules = append(rules, rule2b)
-		}
-
-		return rules, ""
+	// Check for uBO entity matching domains (e.g. "pingit.*") — not representable in WebKit
+	if containsEntityDomain(f.Options.Domains) || containsEntityDomain(f.Options.ExcludeDomains) {
+		return nil, SkipEntityDomain
 	}
 
 	// Single rule case - only one or no domain condition
@@ -266,41 +229,18 @@ func (c *Converter) convertCosmetic(f models.Filter, isException bool) ([]models
 		}
 	}
 
+	// Check for uBO entity matching domains — not representable in WebKit
+	if containsEntityDomain(f.Domains) {
+		return nil, SkipEntityDomain
+	}
+
 	hasInclude := len(include) > 0
 	hasExclude := len(exclude) > 0
 
-	// WebKit only allows ONE of: if-domain, unless-domain, if-top-url, unless-top-url
-	// If both domain types are present, we need to split into separate rules
+	// WebKit only allows ONE of: if-domain, unless-domain
+	// Cannot represent intersection semantics — skip
 	if hasInclude && hasExclude {
-		var rules []models.WebKitRule
-
-		// Rule 1: Apply to included domains only
-		rule1 := models.WebKitRule{
-			Trigger: models.WebKitTrigger{
-				URLFilter: ".*",
-				IfDomain:  include,
-			},
-			Action: models.WebKitAction{
-				Type:     models.ActionCSSDisplayNone,
-				Selector: f.Selector,
-			},
-		}
-		rules = append(rules, rule1)
-
-		// Rule 2: Apply everywhere except excluded domains
-		rule2 := models.WebKitRule{
-			Trigger: models.WebKitTrigger{
-				URLFilter:    ".*",
-				UnlessDomain: exclude,
-			},
-			Action: models.WebKitAction{
-				Type:     models.ActionCSSDisplayNone,
-				Selector: f.Selector,
-			},
-		}
-		rules = append(rules, rule2)
-
-		return rules, ""
+		return nil, SkipDomainIntersection
 	}
 
 	// Single rule case

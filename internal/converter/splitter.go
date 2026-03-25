@@ -2,6 +2,7 @@ package converter
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/bnema/ublock-webkit-filters/internal/models"
 )
@@ -48,17 +49,38 @@ func (s *Splitter) Split(rules []models.WebKitRule, baseName string) map[string]
 	return result
 }
 
-// Deduplicate removes duplicate rules based on their JSON representation
+// sortedKey returns a sorted copy of a string slice for canonical key building
+func sortedKey(s []string) []string {
+	if len(s) == 0 {
+		return s
+	}
+	c := make([]string, len(s))
+	copy(c, s)
+	sort.Strings(c)
+	return c
+}
+
+// Deduplicate removes duplicate rules based on their complete trigger+action
 func Deduplicate(rules []models.WebKitRule) []models.WebKitRule {
 	seen := make(map[string]bool)
 	result := make([]models.WebKitRule, 0, len(rules))
 
 	for _, r := range rules {
-		// Create a key from trigger and action
-		key := fmt.Sprintf("%s|%s|%s",
+		// Build canonical key from ALL trigger and action fields
+		caseSensitive := false
+		if r.Trigger.URLFilterIsCaseSensitive != nil {
+			caseSensitive = *r.Trigger.URLFilterIsCaseSensitive
+		}
+
+		key := fmt.Sprintf("%s|%s|%s|%v|%v|%v|%v|%v",
 			r.Trigger.URLFilter,
 			r.Action.Type,
 			r.Action.Selector,
+			sortedKey(r.Trigger.IfDomain),
+			sortedKey(r.Trigger.UnlessDomain),
+			sortedKey(r.Trigger.ResourceType),
+			sortedKey(r.Trigger.LoadType),
+			caseSensitive,
 		)
 
 		if !seen[key] {

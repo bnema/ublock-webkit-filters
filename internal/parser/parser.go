@@ -246,6 +246,8 @@ func parseOptions(s string) models.FilterOptions {
 			opts.Important = true
 		case strings.HasPrefix(part, "domain="):
 			opts.Domains, opts.ExcludeDomains = parseDomainOption(part[7:])
+		case strings.HasPrefix(part, "from="):
+			opts.Domains, opts.ExcludeDomains = parseDomainOption(part[5:])
 		default:
 			// Check if it's a resource type
 			if rt := mapResourceType(part); rt != "" {
@@ -317,11 +319,19 @@ func hasUnsupportedOptions(s string) bool {
 		"csp=", "removeparam=", "replace=",
 		"header=", "method=", "to=",
 		"permissions=", "uritransform=",
+		"denyallow=",
 	}
 	for _, u := range unsupported {
 		if strings.Contains(s, u) {
 			return true
 		}
 	}
+
+	// Regex domain values (domain=/.../ or from=/.../) are not supported
+	// by WebKit and also break our comma-based option splitting
+	if strings.Contains(s, "domain=/") || strings.Contains(s, "from=/") {
+		return true
+	}
+
 	return false
 }
