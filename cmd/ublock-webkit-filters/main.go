@@ -80,7 +80,7 @@ func initConfig() {
 	// Set defaults
 	viper.SetDefault("http.timeout", "30s")
 	viper.SetDefault("http.retries", 3)
-	viper.SetDefault("output.max_rules_per_file", 50000)
+	viper.SetDefault("output.max_rules_per_file", 150000)
 	viper.SetDefault("output.generate_combined", true)
 	viper.SetDefault("output.generate_manifest", true)
 
@@ -279,7 +279,7 @@ retries = 3
 
 # Output settings
 [output]
-max_rules_per_file = 50000
+max_rules_per_file = 150000
 generate_combined = true
 generate_manifest = true
 

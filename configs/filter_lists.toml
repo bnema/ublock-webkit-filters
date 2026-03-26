@@ -7,7 +7,7 @@ retries = 3
 
 # Output settings
 [output]
-max_rules_per_file = 50000
+max_rules_per_file = 150000
 generate_combined = true
 generate_manifest = true
 

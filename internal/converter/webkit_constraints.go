@@ -42,7 +42,7 @@ package converter
 // - Complex patterns significantly increase compile time
 // - Use url-filter-is-case-sensitive when possible
 // - Avoid patterns like foo.*bar (quantifier in middle)
-// - Maximum 50,000 rules per content blocker
+// - Maximum 150,000 rules per content blocker
 
 import (
 	"strings"

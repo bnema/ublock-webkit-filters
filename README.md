@@ -30,7 +30,7 @@ https://github.com/bnema/ublock-webkit-filters/releases/latest/download/manifest
 
 | File | Description |
 |------|-------------|
-| `combined-part1.json`, `combined-part2.json`, ... | All lists merged and deduplicated (split at 50k rules) |
+| `combined-part1.json`, `combined-part2.json`, ... | All lists merged and deduplicated (split at 150k rules) |
 | `easylist.json` | EasyList - ad blocking |
 | `easyprivacy.json` | EasyPrivacy - tracker blocking |
 | `ublock-filters.json` | uBlock Origin optimizations |
@@ -98,7 +98,7 @@ timeout = "30s"
 retries = 3
 
 [output]
-max_rules_per_file = 50000
+max_rules_per_file = 150000
 generate_combined = true
 generate_manifest = true
 
