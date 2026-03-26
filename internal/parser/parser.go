@@ -264,10 +264,7 @@ func parseOptions(s string) (models.FilterOptions, bool) {
 		case strings.HasPrefix(part, "from="):
 			opts.Domains, opts.ExcludeDomains = parseDomainOption(part[5:])
 		case strings.HasPrefix(part, "~"):
-			// WebKit has no equivalent for negated resource types.
-			if mapResourceType(strings.TrimPrefix(part, "~")) != "" {
-				return models.FilterOptions{}, false
-			}
+			// WebKit has no equivalent for negated resource types or modifiers.
 			return models.FilterOptions{}, false
 		default:
 			// Check if it's a resource type

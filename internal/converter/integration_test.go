@@ -386,7 +386,6 @@ func matchesAnyDomain(host string, domains []string) bool {
 }
 
 func matchesDomain(host, pattern string) bool {
-	host = strings.ToLower(host)
 	pattern = strings.ToLower(strings.TrimSpace(pattern))
 
 	switch {
