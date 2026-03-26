@@ -188,10 +188,9 @@ func (p *Parser) parseNetwork(line string, isException bool) models.Filter {
 			// Skip if it looks like a regex end anchor
 			if !strings.HasPrefix(optPart, "/") {
 				pattern = line[:idx]
-				options = parseOptions(optPart)
-
-				// Check for unsupported options
-				if hasUnsupportedOptions(optPart) {
+				var ok bool
+				options, ok = parseOptions(optPart)
+				if !ok {
 					return p.skip(SkipUnsupportedOpt)
 				}
 			}
@@ -222,9 +221,15 @@ func parseDomainList(s string) []string {
 	return domains
 }
 
-// parseOptions parses network filter options
-func parseOptions(s string) models.FilterOptions {
+// parseOptions parses network filter options.
+// Returns false if the filter uses unsupported or unknown options.
+func parseOptions(s string) (models.FilterOptions, bool) {
 	var opts models.FilterOptions
+
+	if hasUnsupportedOptions(s) {
+		return opts, false
+	}
+
 	parts := strings.Split(s, ",")
 
 	for _, part := range parts {
@@ -234,6 +239,16 @@ func parseOptions(s string) models.FilterOptions {
 		}
 
 		switch {
+		case part == "all":
+			// "all" matches every resource type; omitting resource-type preserves that.
+			continue
+		case part == "beacon":
+			// WebKitGTK 2.50 accepts "ping" but not "beacon", and the closest
+			// broader bucket would over-block unrelated requests.
+			return models.FilterOptions{}, false
+		case part == "object" || part == "object-subrequest":
+			// WebKit has no precise object/plugin resource type.
+			return models.FilterOptions{}, false
 		case part == "third-party" || part == "3p":
 			t := true
 			opts.ThirdParty = &t
@@ -248,15 +263,26 @@ func parseOptions(s string) models.FilterOptions {
 			opts.Domains, opts.ExcludeDomains = parseDomainOption(part[7:])
 		case strings.HasPrefix(part, "from="):
 			opts.Domains, opts.ExcludeDomains = parseDomainOption(part[5:])
+		case strings.HasPrefix(part, "~"):
+			// WebKit has no equivalent for negated resource types.
+			if mapResourceType(strings.TrimPrefix(part, "~")) != "" {
+				return models.FilterOptions{}, false
+			}
+			return models.FilterOptions{}, false
 		default:
 			// Check if it's a resource type
 			if rt := mapResourceType(part); rt != "" {
 				opts.ResourceTypes = append(opts.ResourceTypes, rt)
+				continue
 			}
+
+			// Unknown network modifiers are unsafe to ignore because doing so can
+			// silently broaden a filter into a catch-all block.
+			return models.FilterOptions{}, false
 		}
 	}
 
-	return opts
+	return opts, true
 }
 
 // parseDomainOption parses domain=example.com|~excluded.com
@@ -293,21 +319,19 @@ func mapResourceType(s string) string {
 	case "media":
 		return models.ResourceMedia
 	case "xmlhttprequest", "xhr":
-		return models.ResourceRaw
+		return models.ResourceFetch
 	case "subdocument", "frame":
-		return models.ResourceDocument
-	case "object", "object-subrequest":
-		return models.ResourceRaw
-	case "ping", "beacon":
-		return models.ResourceRaw
+		return models.ResourceChildDocument
+	case "ping":
+		return models.ResourcePing
 	case "popup":
 		return models.ResourcePopup
 	case "other":
-		return models.ResourceRaw
+		return models.ResourceOther
 	case "websocket":
-		return models.ResourceRaw
+		return models.ResourceWebSocket
 	case "document", "doc":
-		return models.ResourceDocument
+		return models.ResourceTopDocument
 	}
 	return ""
 }

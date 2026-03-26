@@ -32,15 +32,22 @@ const (
 
 // Resource type constants (WebKit names)
 const (
-	ResourceDocument   = "document"
-	ResourceImage      = "image"
-	ResourceStyleSheet = "style-sheet"
-	ResourceScript     = "script"
-	ResourceFont       = "font"
-	ResourceRaw        = "raw"
-	ResourceSVG        = "svg-document"
-	ResourceMedia      = "media"
-	ResourcePopup      = "popup"
+	ResourceDocument      = "document"
+	ResourceTopDocument   = "top-document"
+	ResourceChildDocument = "child-document"
+	ResourceImage         = "image"
+	ResourceStyleSheet    = "style-sheet"
+	ResourceScript        = "script"
+	ResourceFont          = "font"
+	ResourceRaw           = "raw"
+	ResourceFetch         = "fetch"
+	ResourceWebSocket     = "websocket"
+	ResourceOther         = "other"
+	ResourceSVG           = "svg-document"
+	ResourceMedia         = "media"
+	ResourcePopup         = "popup"
+	ResourcePing          = "ping"
+	ResourceCSPReport     = "csp-report"
 )
 
 // Load type constants

@@ -140,6 +140,7 @@ This project prefers safety over over-blocking: if a uBO filter cannot be repres
 - Mixed include/exclude domain constraints that require intersection semantics not available in WebKit
 - uBO entity-matching domains such as `pingit.*`
 - Regex domain values such as `domain=/.../` or `from=/.../`
+- `beacon` and plugin `object` resource types when conversion would broaden them beyond the source semantics
 
 ## Default Filter Lists
 
