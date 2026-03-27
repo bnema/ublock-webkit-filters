@@ -8,6 +8,25 @@ import (
 	"github.com/bnema/ublock-webkit-filters/internal/models"
 )
 
+// uBlock network option names used in parseOptions.
+const (
+	optAll            = "all"
+	optBeacon         = "beacon"
+	optObject         = "object"
+	optObjectSubreq   = "object-subrequest"
+	optThirdParty     = "third-party"
+	opt3P             = "3p"
+	optNotThirdParty  = "~third-party"
+	optNot3P          = "~3p"
+	optFirstParty     = "first-party"
+	opt1P             = "1p"
+	optMatchCase      = "match-case"
+	optImportant      = "important"
+	optDomainPrefix   = "domain="
+	optFromPrefix     = "from="
+	optNegationPrefix = "~"
+)
+
 // Parser parses ABP/uBlock filter lists
 type Parser struct {
 	stats Stats
@@ -188,10 +207,9 @@ func (p *Parser) parseNetwork(line string, isException bool) models.Filter {
 			// Skip if it looks like a regex end anchor
 			if !strings.HasPrefix(optPart, "/") {
 				pattern = line[:idx]
-				options = parseOptions(optPart)
-
-				// Check for unsupported options
-				if hasUnsupportedOptions(optPart) {
+				var ok bool
+				options, ok = parseOptions(optPart)
+				if !ok {
 					return p.skip(SkipUnsupportedOpt)
 				}
 			}
@@ -222,9 +240,15 @@ func parseDomainList(s string) []string {
 	return domains
 }
 
-// parseOptions parses network filter options
-func parseOptions(s string) models.FilterOptions {
+// parseOptions parses network filter options.
+// Returns false if the filter uses unsupported or unknown options.
+func parseOptions(s string) (models.FilterOptions, bool) {
 	var opts models.FilterOptions
+
+	if hasUnsupportedOptions(s) {
+		return opts, false
+	}
+
 	parts := strings.Split(s, ",")
 
 	for _, part := range parts {
@@ -234,29 +258,47 @@ func parseOptions(s string) models.FilterOptions {
 		}
 
 		switch {
-		case part == "third-party" || part == "3p":
+		case part == optAll:
+			// "all" matches every resource type; omitting resource-type preserves that.
+			continue
+		case part == optBeacon:
+			// WebKitGTK 2.50 accepts "ping" but not "beacon", and the closest
+			// broader bucket would over-block unrelated requests.
+			return models.FilterOptions{}, false
+		case part == optObject || part == optObjectSubreq:
+			// WebKit has no precise object/plugin resource type.
+			return models.FilterOptions{}, false
+		case part == optThirdParty || part == opt3P:
 			t := true
 			opts.ThirdParty = &t
-		case part == "~third-party" || part == "~3p" || part == "first-party" || part == "1p":
+		case part == optNotThirdParty || part == optNot3P || part == optFirstParty || part == opt1P:
 			f := false
 			opts.ThirdParty = &f
-		case part == "match-case":
+		case part == optMatchCase:
 			opts.MatchCase = true
-		case part == "important":
+		case part == optImportant:
 			opts.Important = true
-		case strings.HasPrefix(part, "domain="):
-			opts.Domains, opts.ExcludeDomains = parseDomainOption(part[7:])
-		case strings.HasPrefix(part, "from="):
-			opts.Domains, opts.ExcludeDomains = parseDomainOption(part[5:])
+		case strings.HasPrefix(part, optDomainPrefix):
+			opts.Domains, opts.ExcludeDomains = parseDomainOption(part[len(optDomainPrefix):])
+		case strings.HasPrefix(part, optFromPrefix):
+			opts.Domains, opts.ExcludeDomains = parseDomainOption(part[len(optFromPrefix):])
+		case strings.HasPrefix(part, optNegationPrefix):
+			// WebKit has no equivalent for negated resource types or modifiers.
+			return models.FilterOptions{}, false
 		default:
 			// Check if it's a resource type
 			if rt := mapResourceType(part); rt != "" {
 				opts.ResourceTypes = append(opts.ResourceTypes, rt)
+				continue
 			}
+
+			// Unknown network modifiers are unsafe to ignore because doing so can
+			// silently broaden a filter into a catch-all block.
+			return models.FilterOptions{}, false
 		}
 	}
 
-	return opts
+	return opts, true
 }
 
 // parseDomainOption parses domain=example.com|~excluded.com
@@ -293,21 +335,19 @@ func mapResourceType(s string) string {
 	case "media":
 		return models.ResourceMedia
 	case "xmlhttprequest", "xhr":
-		return models.ResourceRaw
+		return models.ResourceFetch
 	case "subdocument", "frame":
-		return models.ResourceDocument
-	case "object", "object-subrequest":
-		return models.ResourceRaw
-	case "ping", "beacon":
-		return models.ResourceRaw
+		return models.ResourceChildDocument
+	case "ping":
+		return models.ResourcePing
 	case "popup":
 		return models.ResourcePopup
 	case "other":
-		return models.ResourceRaw
+		return models.ResourceOther
 	case "websocket":
-		return models.ResourceRaw
+		return models.ResourceWebSocket
 	case "document", "doc":
-		return models.ResourceDocument
+		return models.ResourceTopDocument
 	}
 	return ""
 }
