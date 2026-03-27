@@ -8,6 +8,25 @@ import (
 	"github.com/bnema/ublock-webkit-filters/internal/models"
 )
 
+// uBlock network option names used in parseOptions.
+const (
+	optAll            = "all"
+	optBeacon         = "beacon"
+	optObject         = "object"
+	optObjectSubreq   = "object-subrequest"
+	optThirdParty     = "third-party"
+	opt3P             = "3p"
+	optNotThirdParty  = "~third-party"
+	optNot3P          = "~3p"
+	optFirstParty     = "first-party"
+	opt1P             = "1p"
+	optMatchCase      = "match-case"
+	optImportant      = "important"
+	optDomainPrefix   = "domain="
+	optFromPrefix     = "from="
+	optNegationPrefix = "~"
+)
+
 // Parser parses ABP/uBlock filter lists
 type Parser struct {
 	stats Stats
@@ -239,31 +258,31 @@ func parseOptions(s string) (models.FilterOptions, bool) {
 		}
 
 		switch {
-		case part == "all":
+		case part == optAll:
 			// "all" matches every resource type; omitting resource-type preserves that.
 			continue
-		case part == "beacon":
+		case part == optBeacon:
 			// WebKitGTK 2.50 accepts "ping" but not "beacon", and the closest
 			// broader bucket would over-block unrelated requests.
 			return models.FilterOptions{}, false
-		case part == "object" || part == "object-subrequest":
+		case part == optObject || part == optObjectSubreq:
 			// WebKit has no precise object/plugin resource type.
 			return models.FilterOptions{}, false
-		case part == "third-party" || part == "3p":
+		case part == optThirdParty || part == opt3P:
 			t := true
 			opts.ThirdParty = &t
-		case part == "~third-party" || part == "~3p" || part == "first-party" || part == "1p":
+		case part == optNotThirdParty || part == optNot3P || part == optFirstParty || part == opt1P:
 			f := false
 			opts.ThirdParty = &f
-		case part == "match-case":
+		case part == optMatchCase:
 			opts.MatchCase = true
-		case part == "important":
+		case part == optImportant:
 			opts.Important = true
-		case strings.HasPrefix(part, "domain="):
-			opts.Domains, opts.ExcludeDomains = parseDomainOption(part[7:])
-		case strings.HasPrefix(part, "from="):
-			opts.Domains, opts.ExcludeDomains = parseDomainOption(part[5:])
-		case strings.HasPrefix(part, "~"):
+		case strings.HasPrefix(part, optDomainPrefix):
+			opts.Domains, opts.ExcludeDomains = parseDomainOption(part[len(optDomainPrefix):])
+		case strings.HasPrefix(part, optFromPrefix):
+			opts.Domains, opts.ExcludeDomains = parseDomainOption(part[len(optFromPrefix):])
+		case strings.HasPrefix(part, optNegationPrefix):
 			// WebKit has no equivalent for negated resource types or modifiers.
 			return models.FilterOptions{}, false
 		default:
