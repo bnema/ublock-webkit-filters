@@ -323,7 +323,7 @@ enabled = true
 
 [[lists]]
 name = "peter-lowe"
-url = "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=hosts&showintro=1&mimetype=plaintext"
+url = "https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblockplus&mimetype=plaintext"
 enabled = true
 `
 

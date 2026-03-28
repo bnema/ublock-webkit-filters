@@ -147,7 +147,7 @@ This project prefers safety over over-blocking: if a uBO filter cannot be repres
 - [EasyList](https://easylist.to/) - Ad blocking
 - [EasyPrivacy](https://easylist.to/) - Tracker blocking
 - [uBlock Origin filters](https://github.com/uBlockOrigin/uAssets) - Optimizations
-- [Peter Lowe's Ad server list](https://pgl.yoyo.org/adservers/)
+- [Peter Lowe's Ad server list](https://pgl.yoyo.org/adservers/) - Adblock Plus format
 
 ## License
 
