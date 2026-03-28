@@ -220,6 +220,33 @@ func TestNoCatchAllBlockRulesInOutput(t *testing.T) {
 	assert.True(t, len(rules) >= 2, "Safe filters should produce rules, got %d", len(rules))
 }
 
+func TestHashCommentsAndHostsEntriesDoNotGenerateBlockingRules(t *testing.T) {
+	input := `# Blocklist header
+#
+127.0.0.1 101com.com
+0.0.0.0 tracker.example
+||valid.example^
+`
+
+	p := parser.New()
+	filters, err := p.Parse(strings.NewReader(input))
+	require.NoError(t, err)
+	require.Len(t, filters, 1, "only the valid ABP rule should survive parsing")
+	assert.Equal(t, "||valid.example^", filters[0].Pattern)
+	assert.Equal(t, 2, p.Stats().Comments)
+	assert.Equal(t, 2, p.Stats().SkipReasons[parser.SkipHostsEntry])
+
+	c := New()
+	rules := Deduplicate(c.Convert(filters))
+	require.NotEmpty(t, rules)
+
+	for _, r := range rules {
+		assert.NotEqual(t, "#", r.Trigger.URLFilter)
+		assert.NotContains(t, r.Trigger.URLFilter, "127\\.0\\.0\\.1")
+		assert.NotContains(t, r.Trigger.URLFilter, "0\\.0\\.0\\.0")
+	}
+}
+
 func TestUnsupportedWildcardModifiersDoNotBlockRealSites(t *testing.T) {
 	// Before the parser fix, the first two lines below degraded into global
 	// ".*" block rules and would have blocked any top-level document, including

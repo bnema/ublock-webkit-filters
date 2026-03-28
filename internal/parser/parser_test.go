@@ -147,3 +147,30 @@ func TestLatestWebKitResourceTypesAreUsed(t *testing.T) {
 	assert.Equal(t, []string{models.ResourceWebSocket}, filters[3].Options.ResourceTypes)
 	assert.Equal(t, []string{models.ResourceOther}, filters[4].Options.ResourceTypes)
 }
+
+func TestHashCommentsAreSkippedWithoutBreakingCosmeticSyntax(t *testing.T) {
+	p := New()
+	filters, err := p.Parse(strings.NewReader(
+		`#
+# plain comment
+##.ad-slot
+#@#.ad-slot`,
+	))
+	assert.NoError(t, err)
+	assert.Len(t, filters, 2, "cosmetic syntaxes must still parse while # comments are skipped")
+	assert.Equal(t, models.FilterTypeCosmetic, filters[0].Type)
+	assert.Equal(t, models.FilterTypeCosmeticException, filters[1].Type)
+	assert.Equal(t, 2, p.Stats().Comments)
+}
+
+func TestHostsEntriesAreSkipped(t *testing.T) {
+	p := New()
+	filters, err := p.Parse(strings.NewReader(
+		`127.0.0.1 101com.com
+0.0.0.0 tracker.example # inline comment`,
+	))
+	assert.NoError(t, err)
+	assert.Empty(t, filters, "hosts-file entries should be skipped, not converted literally")
+	assert.Equal(t, 2, p.Stats().Unsupported)
+	assert.Equal(t, 2, p.Stats().SkipReasons[SkipHostsEntry])
+}

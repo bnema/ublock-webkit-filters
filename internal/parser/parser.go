@@ -3,6 +3,7 @@ package parser
 import (
 	"bufio"
 	"io"
+	"net"
 	"strings"
 
 	"github.com/bnema/ublock-webkit-filters/internal/models"
@@ -51,6 +52,7 @@ const (
 	SkipUnsupportedOpt    = "unsupported-option (redirect, csp, etc)"
 	SkipInvalidRegex      = "invalid-regex"
 	SkipCosmeticException = "cosmetic-exception (#@#)"
+	SkipHostsEntry        = "hosts-entry-unsupported"
 )
 
 // New creates a new parser
@@ -111,8 +113,15 @@ func (p *Parser) Parse(r io.Reader) ([]models.Filter, error) {
 // parseLine parses a single filter line
 func (p *Parser) parseLine(line string) models.Filter {
 	// Comments
-	if strings.HasPrefix(line, "!") || strings.HasPrefix(line, "[") {
+	if isCommentLine(line) {
 		return models.Filter{Type: models.FilterTypeComment, Raw: line}
+	}
+
+	// Hosts-file entries are not ABP/uBO syntax. If they slip into the
+	// pipeline, skipping them is safer than converting the literal IP + host
+	// text into an unintended URL regex.
+	if looksLikeHostsEntry(line) {
+		return p.skip(SkipHostsEntry)
 	}
 
 	// Scriptlet injection - unsupported
@@ -147,6 +156,40 @@ func (p *Parser) parseLine(line string) models.Filter {
 
 	// Network filters
 	return p.parseNetwork(line, false)
+}
+
+func isCommentLine(line string) bool {
+	if strings.HasPrefix(line, "!") || strings.HasPrefix(line, "[") {
+		return true
+	}
+
+	// Hosts-style lists commonly use leading "#" comments. Keep cosmetic
+	// syntaxes available by excluding "##" and "#@#".
+	return strings.HasPrefix(line, "#") &&
+		!strings.HasPrefix(line, "##") &&
+		!strings.HasPrefix(line, "#@#")
+}
+
+func looksLikeHostsEntry(line string) bool {
+	fields := strings.Fields(line)
+	if len(fields) < 2 {
+		return false
+	}
+
+	if net.ParseIP(fields[0]) == nil {
+		return false
+	}
+
+	for _, field := range fields[1:] {
+		if strings.HasPrefix(field, "#") {
+			break
+		}
+		if field != "" {
+			return true
+		}
+	}
+
+	return false
 }
 
 // containsProcedural checks for procedural cosmetic filter syntax
